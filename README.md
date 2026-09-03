@@ -106,11 +106,46 @@ Ubuntu PC                 FANUC 控制柜
 子网掩码 255.255.255.0     子网掩码 255.255.255.0
 ```
 
-配置完成后检查网卡地址，并在控制柜允许 ICMP 的情况下测试网络：
+先查看网卡及 NetworkManager 连接名称：
+
+```bash
+nmcli device status
+nmcli connection show
+```
+
+假设连接 FANUC 控制柜的连接名称是 `Wired connection 1`，执行：
+
+```bash
+sudo nmcli connection modify "Wired connection 1" \
+  ipv4.method manual \
+  ipv4.addresses 192.168.1.100/24 \
+  ipv4.gateway "" \
+  ipv4.dns ""
+
+sudo nmcli connection down "Wired connection 1"
+sudo nmcli connection up "Wired connection 1"
+```
+
+必须把 `Wired connection 1` 替换成实际连接控制柜的连接名称。不要修改用于
+访问互联网的另一块网卡。`192.168.1.100/24` 中的 `/24` 等同于子网掩码
+`255.255.255.0`；专用直连网卡通常不需要设置网关和 DNS。
+
+配置完成后检查网卡地址、路由，并在控制柜允许 ICMP 的情况下测试网络：
 
 ```bash
 ip -br addr
+ip route
 ping -c 4 192.168.1.10
+```
+
+如果需要把这条连接恢复为自动获取 IP：
+
+```bash
+sudo nmcli connection modify "Wired connection 1" \
+  ipv4.method auto \
+  ipv4.addresses ""
+sudo nmcli connection down "Wired connection 1"
+sudo nmcli connection up "Wired connection 1"
 ```
 
 ### 2. 启动 ROS 2 真机驱动并验证连接
