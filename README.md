@@ -34,7 +34,7 @@ chmod +x install.sh build.sh setup.sh update_sources.sh scripts/doctor.sh
 1. 校验 Ubuntu 24.04；
 2. 配置 ROS 官方 apt 源；
 3. 安装 ROS 2 Jazzy Desktop、开发工具和 Qt 6；
-4. 用 `vcs` 导入 FANUC 官方 Jazzy 驱动；
+4. 用 `vcs` 导入 FANUC 官方机器人描述和 Jazzy 驱动；
 5. 用 `rosdep` 安装工作空间依赖；
 6. 用 `colcon` 构建并运行自检；
 7. 可选地将工作空间环境写入 `~/.bashrc`。
@@ -63,8 +63,7 @@ ros2 pkg list | grep -E 'fanuc|fanuc_hmi'
 
 ## 重要说明
 
-- `fanuc_hmi` 的源码没有包含在当前空工程中；请将它完整放入 `src/fanuc_hmi`，
-  并在其 `package.xml` 中声明 ROS 依赖。Qt 6 系统依赖由本安装包安装。
+- `fanuc_hmi` 源码位于 `src/fanuc_hmi`；Qt 6 系统依赖由本安装包安装。
 - 默认导入 FANUC CORPORATION 官方 `fanuc_driver` 的 `main` 分支；该分支面向
   ROS 2 Jazzy。若使用公司的 fork，在 `fanuc_jazzy.repos` 中替换 URL/version。
 - 真机连接仍需按机器人型号配置 FANUC 控制器、RMI/网络及机器人描述文件；

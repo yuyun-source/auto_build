@@ -28,7 +28,8 @@ source /etc/os-release
 
 log "安装基础工具并启用 Ubuntu Universe"
 sudo apt-get update
-sudo apt-get install -y locales software-properties-common curl ca-certificates gnupg git
+sudo apt-get install -y locales software-properties-common curl ca-certificates gnupg git git-lfs
+git lfs install
 sudo add-apt-repository -y universe
 sudo locale-gen en_US en_US.UTF-8
 sudo update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
