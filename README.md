@@ -89,6 +89,66 @@ ros2 launch fanuc_moveit_config fanuc_moveit.launch.py \
 
 保持该终端运行。停止时使用 `Ctrl+C`，不要使用会暂停进程的 `Ctrl+Z`。
 
+## 连接真实机器人
+
+连接真机与 Mock 相比，必须先完成网络配置和真实硬件连接验证。首次联调应在
+FANUC 专业人员或经过授权的现场人员指导下进行，不要直接发送运动目标。
+
+### 1. 配置同网段静态 IP
+
+使用专用以太网线连接 Ubuntu 电脑网卡和 FANUC 控制柜。电脑与控制柜必须在
+同一子网，但不能使用相同 IP。例如控制柜地址是 `192.168.1.10` 时，可以把
+Ubuntu 对应网卡配置为：
+
+```text
+Ubuntu PC                 FANUC 控制柜
+192.168.1.100             192.168.1.10
+子网掩码 255.255.255.0     子网掩码 255.255.255.0
+```
+
+配置完成后检查网卡地址，并在控制柜允许 ICMP 的情况下测试网络：
+
+```bash
+ip -br addr
+ping -c 4 192.168.1.10
+```
+
+### 2. 启动 ROS 2 真机驱动并验证连接
+
+先确认机器人型号、控制柜 IP、所需 FANUC 软件选项及安全条件。控制柜应清除
+报警，按现场要求设置运行模式和示教器状态，机械臂周围必须没有人员或障碍物。
+
+以 CRX-10iA、控制柜 IP `192.168.1.10` 为例：
+
+```bash
+cd ~/auto_build
+source setup.sh
+ros2 launch fanuc_moveit_config fanuc_moveit.launch.py \
+  robot_model:=crx10ia \
+  robot_ip:=192.168.1.10
+```
+
+这条命令启动 ROS 2 真机驱动并连接控制柜，本身不代表已经安全地执行机械臂
+运动。保持该终端运行，在另一个终端先验证只读状态和控制器接口：
+
+```bash
+cd ~/auto_build
+source setup.sh
+ros2 topic echo /joint_states --once
+ros2 control list_controllers
+ros2 action list | grep follow_joint_trajectory
+```
+
+当前 HMI 使用的轨迹 Action 是：
+
+```text
+/joint_trajectory_controller/follow_joint_trajectory
+```
+
+只有在 `/joint_states` 能反映真实姿态、相关控制器为 `active`，并完成风险评估、
+限位检查和低速测试准备后，才可以通过 RViz 或 HMI 尝试小幅运动。其他机器人
+系列可能还需要传入对应的 `robot_series` 和 `robot_model` 参数。
+
 ## 启动 HMI
 
 在第二个终端运行：
