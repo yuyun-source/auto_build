@@ -12,6 +12,13 @@ using namespace std::chrono_literals;
 namespace
 {
 constexpr double kPi = 3.14159265358979323846;
+constexpr auto kJointStateTimeout = 1s;
+
+std::int64_t steadyNowNs()
+{
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+}
 
 double radToDeg(double rad)
 {
@@ -65,6 +72,16 @@ void FanucRosBridge::start()
             if (ready != controller_ready_.exchange(ready))
                 emit controllerReadyChanged(ready);
 
+            const auto last_joint_state = last_joint_state_ns_.load();
+            const auto timeout_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                kJointStateTimeout).count();
+            if (joint_state_connected_.load() &&
+                steadyNowNs() - last_joint_state > timeout_ns &&
+                joint_state_connected_.exchange(false))
+            {
+                emit connectionChanged(false);
+            }
+
             rate.sleep();
         }
     });
@@ -114,7 +131,8 @@ void FanucRosBridge::handleJointState(
         }
     }
 
-    if (!received_joint_state_.exchange(true))
+    last_joint_state_ns_.store(steadyNowNs());
+    if (!joint_state_connected_.exchange(true))
         emit connectionChanged(true);
 
     emit jointStateUpdated(

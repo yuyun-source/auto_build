@@ -5,6 +5,7 @@
 
 #include <array>
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -53,7 +54,8 @@ private:
 
     std::thread spin_thread_;
     std::atomic_bool running_{false};
-    std::atomic_bool received_joint_state_{false};
+    std::atomic_bool joint_state_connected_{false};
+    std::atomic<std::int64_t> last_joint_state_ns_{0};
     std::atomic_bool controller_ready_{false};
 
     mutable std::mutex joint_mutex_;
