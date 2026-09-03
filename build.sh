@@ -20,7 +20,9 @@ done
 
 [[ -r "/opt/ros/${ROS_DISTRO}/setup.bash" ]] || { echo "请先运行 ./install.sh" >&2; exit 1; }
 # shellcheck disable=SC1090
+set +u
 source "/opt/ros/${ROS_DISTRO}/setup.bash"
+set -u
 
 if (( CLEAN )); then
   rm -rf -- "${ROOT_DIR}/build" "${ROOT_DIR}/install" "${ROOT_DIR}/log"

@@ -10,11 +10,14 @@ if [[ ! -r "/opt/ros/${_fanuc_ros_distro}/setup.bash" ]]; then
 fi
 
 # shellcheck disable=SC1090
+_fanuc_nounset_was_on=0
+case $- in *u*) _fanuc_nounset_was_on=1; set +u ;; esac
 source "/opt/ros/${_fanuc_ros_distro}/setup.bash"
 if [[ -r "${_fanuc_setup_dir}/install/setup.bash" ]]; then
   # shellcheck disable=SC1091
   source "${_fanuc_setup_dir}/install/setup.bash"
 fi
+(( _fanuc_nounset_was_on )) && set -u
 
 export FANUC_HMI_WS="${_fanuc_setup_dir}"
-unset _fanuc_setup_dir _fanuc_ros_distro
+unset _fanuc_setup_dir _fanuc_ros_distro _fanuc_nounset_was_on

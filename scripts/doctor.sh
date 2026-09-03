@@ -17,8 +17,10 @@ command -v rosdep >/dev/null && ok "rosdep" || fail "rosdep 不可用"
 
 if [[ -r "/opt/ros/${ROS_DISTRO}/setup.bash" ]]; then
   # shellcheck disable=SC1090
+  set +u
   source "/opt/ros/${ROS_DISTRO}/setup.bash"
   [[ -r "${ROOT_DIR}/install/setup.bash" ]] && source "${ROOT_DIR}/install/setup.bash"
+  set -u
   ros2 pkg prefix fanuc_hardware_interface >/dev/null 2>&1 \
     && ok "FANUC Driver 已构建" || fail "未找到 fanuc_hardware_interface"
   ros2 pkg prefix fanuc_hmi >/dev/null 2>&1 \

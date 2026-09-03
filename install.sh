@@ -60,7 +60,9 @@ rosdep update --rosdistro "${ROS_DISTRO}"
 log "导入 FANUC Driver 源码"
 mkdir -p "${ROOT_DIR}/src"
 # shellcheck disable=SC1090
+set +u
 source "/opt/ros/${ROS_DISTRO}/setup.bash"
+set -u
 vcs import --skip-existing "${ROOT_DIR}/src" < "${ROOT_DIR}/fanuc_jazzy.repos"
 while IFS= read -r -d '' gitmodules; do
   git -C "$(dirname "${gitmodules}")" submodule update --init --recursive
