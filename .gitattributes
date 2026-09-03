@@ -1,0 +1,4 @@
+*.sh text eol=lf
+*.repos text eol=lf
+*.env.example text eol=lf
+*.md text eol=lf
