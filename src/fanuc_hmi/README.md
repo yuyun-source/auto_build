@@ -11,7 +11,7 @@ Confirmed interfaces used by this package:
 ## Build
 
 ```bash
-cd ~/ws_fanuc
+cd ~/auto_build
 source /opt/ros/jazzy/setup.bash
 rm -rf build/fanuc_hmi install/fanuc_hmi
 colcon build --packages-select fanuc_hmi --symlink-install
@@ -23,7 +23,7 @@ source install/setup.bash
 Keep the FANUC mock / MoveIt launch running in another terminal. Then:
 
 ```bash
-cd ~/ws_fanuc
+cd ~/auto_build
 source /opt/ros/jazzy/setup.bash
 source install/setup.bash
 ros2 run fanuc_hmi fanuc_hmi

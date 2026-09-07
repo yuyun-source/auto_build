@@ -97,8 +97,7 @@ ros2 launch fanuc_moveit_config fanuc_moveit.launch.py \
 
 ## Stäubli Mock 与 HMI 联调
 
-本节根据 [GPT 讨论记录](https://chatgpt.com/share/6a9e86c8-482c-83ea-b25a-b4508c91bee6)
-和实际操作命令整理，目标是跑通以下链路：
+本节目标是跑通以下链路：
 
 ```text
 Qt HMI → FollowJointTrajectory → joint_trajectory_controller
@@ -130,8 +129,8 @@ ros2 pkg prefix fanuc_hmi
 应指向当前 `auto_build/install/`。Stäubli 源码独立保留在它自己的 Git 仓库中，
 不要将其作为嵌套仓库提交到本仓库；当前 `update_sources.sh` 不负责更新它。
 
-所有运行终端统一使用当前工作空间环境。不要在加载 `auto_build` 后再执行
-`source ~/ws_fanuc/install/setup.bash`，否则同名包可能来自旧工作空间。
+所有运行终端统一使用 `auto_build` 工作空间环境。不要再加载其他工作空间的
+`install/setup.bash`，否则同名包可能来自旧工作空间。
 若已经混用，打开干净终端，并检查 `~/.bashrc` 是否自动加载旧环境。
 
 ### 2. 终端 1：启动 Stäubli Mock
@@ -227,7 +226,7 @@ HMI 应显示 `Connected` 和 `Ready`。核对六轴顺序后，输入一个 Moc
 首次接收有效状态时保存前六个关节名，后续按名称匹配位置并发送目标。因此，
 在这六个名称恰好是控制器接受的六轴、接口名称一致且控制器激活时，可以复用
 当前 HMI 控制逻辑。包名仍为 `fanuc_hmi`，节点名仍为 `fanuc_hmi_node`；
-讨论中提到的通用命名和关节日志属于后续可选改进，当前代码尚未实施。
+通用命名和关节日志属于后续可选改进，当前代码尚未实施。
 
 切换流程是：停止 HMI 和旧机器人 launch → 启动目标机器人的 launch →
 检查控制器、话题和 Action → 重新启动 HMI。**必须重启 HMI**，因为它不会在
