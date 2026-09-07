@@ -3,6 +3,10 @@
 适用于 Ubuntu 24.04、ROS 2 Jazzy 和 Qt 6。本仓库本身就是 ROS 2 工作空间，
 可在新系统上自动安装依赖、下载 FANUC 源码并构建 `fanuc_hmi`。
 
+同一个 HMI 也可用于 Stäubli TX2-60L Mock，操作见下方
+[Stäubli Mock 与 HMI 联调](#staubli-mock)。现有一键安装脚本只下载 FANUC
+外部源码，Stäubli 需要按该节手动添加。
+
 ## 仓库结构
 
 ```text
@@ -89,7 +93,168 @@ ros2 launch fanuc_moveit_config fanuc_moveit.launch.py \
 
 保持该终端运行。停止时使用 `Ctrl+C`，不要使用会暂停进程的 `Ctrl+Z`。
 
-## 连接真实机器人
+<a id="staubli-mock"></a>
+
+## Stäubli Mock 与 HMI 联调
+
+本节根据 [GPT 讨论记录](https://chatgpt.com/share/6a9e86c8-482c-83ea-b25a-b4508c91bee6)
+和实际操作命令整理，目标是跑通以下链路：
+
+```text
+Qt HMI → FollowJointTrajectory → joint_trajectory_controller
+       → Stäubli Mock Hardware → /joint_states → HMI / RViz
+```
+
+以下命令在 Ubuntu 24.04 / ROS 2 Jazzy 的 Bash 终端执行，假设本仓库位于
+`~/auto_build`；如实际路径不同，请统一替换。首次使用新系统，先完成上面的
+一键安装。此流程是 Mock 联调，不需要机器人 IP，也不需要另外启动 MoveIt。
+
+### 1. 下载驱动、安装依赖并构建
+
+```bash
+cd ~/auto_build
+git clone https://github.com/yuyun-source/staubli_driver_ros2.git src/staubli_driver_ros2
+
+source /opt/ros/jazzy/setup.bash
+rosdep install --from-paths src --ignore-src -r -y
+colcon build --symlink-install
+source ./install/setup.bash
+
+ros2 pkg list | grep staubli
+ros2 pkg prefix staubli_bringup
+ros2 pkg prefix fanuc_hmi
+```
+
+如果 `src/staubli_driver_ros2` 已存在，跳过 clone。依赖安装有报错时应先解决，
+再继续构建。构建成功后应能找到 `staubli_bringup` 等 Stäubli 包，两个 prefix
+应指向当前 `auto_build/install/`。Stäubli 源码独立保留在它自己的 Git 仓库中，
+不要将其作为嵌套仓库提交到本仓库；当前 `update_sources.sh` 不负责更新它。
+
+所有运行终端统一使用当前工作空间环境。不要在加载 `auto_build` 后再执行
+`source ~/ws_fanuc/install/setup.bash`，否则同名包可能来自旧工作空间。
+若已经混用，打开干净终端，并检查 `~/.bashrc` 是否自动加载旧环境。
+
+### 2. 终端 1：启动 Stäubli Mock
+
+先用 `Ctrl+C` 停止原来的 FANUC launch 和 HMI，再执行：
+
+```bash
+cd ~/auto_build
+source setup.sh
+ros2 launch staubli_bringup launch_robot_control.launch.py \
+  robot_model:=tx2_60l \
+  use_mock_hardware:=true \
+  start_controller:=joint_trajectory_controller \
+  gui:=true
+```
+
+保持终端 1 运行，RViz 应显示 Stäubli 模型。必须显式指定
+`start_controller:=joint_trajectory_controller`，确保用于 HMI 的轨迹控制器激活。
+不要同时启动使用相同话题和 Action 名称的 FANUC 与 Stäubli 实例。
+
+### 3. 终端 2：检查接口并发送测试轨迹
+
+```bash
+cd ~/auto_build
+source setup.sh
+ros2 control list_controllers
+ros2 topic echo /joint_states --once
+ros2 action list -t
+ros2 action info /joint_trajectory_controller/follow_joint_trajectory
+```
+
+继续前确认：
+
+- `joint_state_broadcaster` 和 `joint_trajectory_controller` 均为 `active`。
+- `/joint_states` 包含 `joint_1` 至 `joint_6` 及对应的 `position`。
+- Action 为 `/joint_trajectory_controller/follow_joint_trajectory`，类型为
+  `control_msgs/action/FollowJointTrajectory`，且 `Action servers: 1`。
+
+确认当前运行的是 Mock 后，在终端 2 发送一次测试目标：
+
+```bash
+ros2 action send_goal \
+  /joint_trajectory_controller/follow_joint_trajectory \
+  control_msgs/action/FollowJointTrajectory \
+  "{
+    trajectory: {
+      joint_names: ['joint_1', 'joint_2', 'joint_3', 'joint_4', 'joint_5', 'joint_6'],
+      points: [
+        {
+          positions: [0.2, -0.3, 0.4, 0.0, 0.3, 0.0],
+          time_from_start: {sec: 3}
+        }
+      ]
+    }
+  }"
+
+ros2 topic echo /joint_states --once
+```
+
+这里的角度单位为 **弧度（rad）**，目标时间为 3 秒。预期目标被接受并成功完成
+（`SUCCEEDED`，结果 `error_code: 0`），RViz 姿态变化，关节状态按名称对应接近
+目标值。若实际关节名不同，必须以当前控制器配置和关节状态为准。
+
+### 4. 终端 3：启动 HMI 并验证闭环
+
+首次完整构建已包含 HMI。只有修改 HMI 源码后，才需要先增量构建：
+
+```bash
+cd ~/auto_build
+source /opt/ros/jazzy/setup.bash
+colcon build --packages-select fanuc_hmi --symlink-install
+```
+
+在终端 3 启动：
+
+```bash
+cd ~/auto_build
+source setup.sh
+ros2 run fanuc_hmi fanuc_hmi
+```
+
+HMI 应显示 `Connected` 和 `Ready`。核对六轴顺序后，输入一个 Mock 测试目标，
+例如 J1～J6 为 `[5, 0, 0, 0, 0, 0]`，点击 `Move`。HMI 输入和显示单位为
+**度（°）**，当前代码将目标转换成弧度并发送 5 秒轨迹。
+
+验收标准：HMI 显示运动完成，RViz 姿态同步变化，`/joint_states` 更新，HMI
+反馈角度接近所填目标。停止 Mock 后，HMI 应在关节状态超时后显示
+`Disconnected`，Action 服务消失后显示 `Not Ready`。
+
+### 5. FANUC 与 Stäubli 切换时，HMI 是否需要改代码
+
+当前 `FanucRosBridge.cpp` 已订阅 `/joint_states`，使用上述标准轨迹 Action，
+首次接收有效状态时保存前六个关节名，后续按名称匹配位置并发送目标。因此，
+在这六个名称恰好是控制器接受的六轴、接口名称一致且控制器激活时，可以复用
+当前 HMI 控制逻辑。包名仍为 `fanuc_hmi`，节点名仍为 `fanuc_hmi_node`；
+讨论中提到的通用命名和关节日志属于后续可选改进，当前代码尚未实施。
+
+切换流程是：停止 HMI 和旧机器人 launch → 启动目标机器人的 launch →
+检查控制器、话题和 Action → 重新启动 HMI。**必须重启 HMI**，因为它不会在
+切换机器人后自动清空首次保存的关节名。若还有夹爪等额外关节，不能假设消息
+前六项就是机械臂六轴，应先调整关节选择逻辑。
+
+当前 `Home` 发送六轴全零目标；这只是测试目标，不代表真实机器人的安全回零
+姿态。真机接入还需单独核对对应驱动、控制柜和机器人模型配置，不能仅把本节
+的 Mock 参数改成 false 就视为完成真机联调。
+
+### 常见问题
+
+| 现象 | 检查与处理 |
+| --- | --- |
+| 找不到 `staubli_bringup` | 确认源码位于 `src/staubli_driver_ros2`、构建成功，并重新 `source setup.sh`。 |
+| 轨迹控制器为 `inactive` | 检查 launch 的 `start_controller` 参数；已加载时可执行 `ros2 control set_controller_state joint_trajectory_controller active`。 |
+| HMI 显示 `Not Ready` | 检查轨迹控制器和 Action server；仅有 RViz 窗口不代表控制器已经就绪。 |
+| HMI 显示 `Disconnected` | 检查 `/joint_states` 是否持续发布、是否包含六个有效关节；各终端应使用相同 `ROS_DOMAIN_ID`。 |
+| 目标被拒绝或中止 | 查看 launch 日志及 Action 的错误结果，核对关节名、目标限位和控制器状态。 |
+| 运行到旧版 HMI | 用 `ros2 pkg prefix fanuc_hmi` 检查来源，清理旧工作空间的自动 source 配置后重新开终端。 |
+| 切换机器人后关节不匹配 | 停止两个机器人实例和 HMI，仅启动一个 Mock，并重新启动 HMI。 |
+
+驱动安装和型号参数以 [Stäubli 驱动仓库](https://github.com/yuyun-source/staubli_driver_ros2)
+为准；若版本变化，可运行 `ros2 launch staubli_bringup launch_robot_control.launch.py --show-args`
+查看本机安装版本的参数。
+
+## 连接真实机器人（FANUC）
 
 连接真机与 Mock 相比，必须先完成网络配置和真实硬件连接验证。首次联调应在
 FANUC 专业人员或经过授权的现场人员指导下进行，不要直接发送运动目标。
