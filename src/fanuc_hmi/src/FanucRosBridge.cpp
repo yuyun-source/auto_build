@@ -164,6 +164,20 @@ void FanucRosBridge::moveJoints(
 void FanucRosBridge::sendJointGoal(
     const std::array<double, 6> &target_deg)
 {
+    const auto timeout_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        kJointStateTimeout).count();
+    if (!joint_state_connected_.load() ||
+        steadyNowNs() - last_joint_state_ns_.load() > timeout_ns)
+    {
+        emit motionStatusChanged(QStringLiteral("关节反馈已断开，拒绝发送目标"), false);
+        return;
+    }
+    if (!std::all_of(target_deg.begin(), target_deg.end(),
+                     [](double value) { return std::isfinite(value); }))
+    {
+        emit motionStatusChanged(QStringLiteral("目标角度必须为有限数值"), false);
+        return;
+    }
     if (!trajectory_client_->action_server_is_ready())
     {
         emit motionStatusChanged(
@@ -216,6 +230,17 @@ void FanucRosBridge::sendJointGoal(
             switch (result.code)
             {
             case rclcpp_action::ResultCode::SUCCEEDED:
+                if (!result.result ||
+                    result.result->error_code != FollowJointTrajectory::Result::SUCCESSFUL)
+                {
+                    emit motionStatusChanged(
+                        result.result
+                            ? QStringLiteral("轨迹执行失败 (%1): %2")
+                                  .arg(result.result->error_code)
+                                  .arg(QString::fromStdString(result.result->error_string))
+                            : QStringLiteral("控制器未返回轨迹结果"), false);
+                    break;
+                }
                 emit motionStatusChanged(
                     QStringLiteral("运动完成"), true);
                 break;

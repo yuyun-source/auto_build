@@ -79,7 +79,92 @@ ros2 pkg prefix fanuc_crx_description
 
 三个 `ros2 pkg prefix` 命令都应返回 `~/auto_build/install/` 中的路径。
 
-## 启动 CRX-10iA Mock
+## LR Mate 200iD：Mock 与真机
+
+现场标准型号使用 `lrmate200id`（不适用于 7L 等其他变型）。统一入口为
+`auto_build_bringup lrmate200id.launch.py`，自动选择驱动的 Mock 或真机 launch，
+固定 `robot_series:=lrmate`。HMI 直接连接轨迹控制器；此入口不启动 MoveIt，
+RViz 用于显示模型和关节姿态，不提供路径规划或碰撞检查。
+
+### 更新和构建
+
+```bash
+cd ~/auto_build
+git pull --ff-only
+./build.sh
+source setup.sh
+ros2 pkg prefix auto_build_bringup
+ros2 pkg prefix fanuc_lrmate_description
+```
+
+如果提示缺少 `6dof_robot.urdf.xacro` 或 LR Mate 模型，先检查外部源码是否有
+本地修改，再用 `./update_sources.sh` 更新并重新构建。不要修改 `install/` 中
+生成的文件，也不要仅向 CRX MoveIt launch 的型号列表添加 `lrmate200id`。
+
+### 终端 1：选择 Mock 或真机之一
+
+Mock 不连接控制柜：
+
+```bash
+cd ~/auto_build
+source setup.sh
+ros2 launch auto_build_bringup lrmate200id.launch.py use_mock:=true
+```
+
+驱动还会打开滑块窗口，使用 HMI 时不要同时通过滑块发送命令。
+
+真机模式连接现场控制柜，启动前停止 Mock 和旧 HMI：
+
+```bash
+cd ~/auto_build
+source setup.sh
+read -r -p '控制柜 IPv4 地址: ' ROBOT_IP
+ros2 launch auto_build_bringup lrmate200id.launch.py \
+  use_mock:=false robot_ip:="$ROBOT_IP"
+```
+
+真机模式必须指定 IP，不会因连接失败自动退回 Mock。它会启动真机驱动并激活
+`joint_trajectory_controller`，不会由本项目主动发送测试运动目标。
+
+电脑与控制柜 IP 连通是网络条件；当前 FANUC 驱动还要求控制柜支持 Stream
+Motion 和 Remote Motion。官方要求 J519 + R912，或包含两者的 S636；支持的
+控制柜及最低软件版本见 [驱动系统要求](https://fanuc-corporation.github.io/fanuc_driver_doc/main/docs/environment/system_requirements.html)。
+这些功能不能通过修改电脑端 launch 补出来。控制柜还需按
+[FANUC 驱动文档](https://fanuc-corporation.github.io/fanuc_driver_doc/main/index.html)
+完成对应版本的外部控制设置。
+
+### 终端 2：先检查反馈，再操作 HMI
+
+```bash
+cd ~/auto_build
+source setup.sh
+ros2 control list_controllers
+ros2 topic echo /joint_states --once
+ros2 action info /joint_trajectory_controller/follow_joint_trajectory
+ros2 run fanuc_hmi fanuc_hmi
+```
+
+两个控制器 `joint_state_broadcaster`、`joint_trajectory_controller` 应为
+`active`，Action 应有一个服务端。真机时先将六轴反馈与示教器姿态核对，
+HMI 中点击“当前值 → 目标值”，再按现场允许的低速、小幅运动方式测试。
+不要将界面初始全零值直接作为真机目标，也不要使用未确认的 `Home (0°)`。
+
+当前 HMI 发送 5 秒关节目标，界面 ±360° 是输入范围，不是 LR Mate 的实际
+关节限位；目标必须符合模型和现场限位。反馈超时会阻止新目标发送，但这不等于
+取消正在执行的运动，软件连接状态也不等于安全停止；现场停止使用控制柜的
+停止/急停装置。Mock 验证只能证明接口流程，不能替代真机联调。
+
+若真机启动失败，查看终端 1 中最早出现的连接或协议错误：
+
+| 现象 | 下一步 |
+| --- | --- |
+| 参数不接受 `lrmate200id` | 确认使用本节入口，而非 CRX 的 `fanuc_moveit.launch.py`。 |
+| 找不到模型或 launch | 更新并构建外部 FANUC 源码，检查 `ros2 pkg prefix` 是否指向当前工作空间。 |
+| IP 能 ping 通但驱动连接失败 | 检查控制柜通信功能、软件版本、外部控制设置及端口网络连通性；ping 不验证运动协议。 |
+| 有反馈但控制器未激活 | 检查驱动和控制器启动日志，确认真机没有报警或外部控制条件未满足。 |
+| HMI 拒绝发送，提示反馈断开 | 恢复持续有效的关节反馈；不要使用缓存姿态继续发送。 |
+
+## 启动 CRX-10iA Mock（其他型号示例）
 
 在第一个终端运行：
 
